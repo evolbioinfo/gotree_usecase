@@ -13,7 +13,7 @@ while(<REFSEQ>){
 }
 close(REFSEQ);
 
-open(GENE2ACCESSION,"unpigz -c ".$ARGV[1]."|");
+open(GENE2ACCESSION,"gunzip -c ".$ARGV[1]."|");
 while(<GENE2ACCESSION>){
     chomp;
     my @cols = split(/\t/);
@@ -25,7 +25,7 @@ while(<GENE2ACCESSION>){
 close(GENE2ACCESSION);
 
 
-open(GENEINFO,"unpigz -c ".$ARGV[2]."|");
+open(GENEINFO,"gunzip -c ".$ARGV[2]."|");
 while(<GENEINFO>){
     chomp;
     my @cols = split(/\t/);

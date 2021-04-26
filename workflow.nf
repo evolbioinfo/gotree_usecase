@@ -16,12 +16,12 @@ refseqid=file(params.refseqid)
 
 
 /************************************/
-/*       Get the HGNC ID            */
+/*       Get the NCBI ID            */
 /* Related to the RefSeq protein ID */
 /*  Given in                        */
 /* https://journals.plos.org/plosbiology/article/file?type=supplementary&id=info:doi/10.1371/journal.pbio.3000954.s008&rev=1 */
 /************************************/
-process getHGNCIds{
+process getNCBIIds{
 	publishDir "${outpath}", mode: 'copy'
 
 	input:
@@ -35,31 +35,32 @@ process getHGNCIds{
 
 	script:
 	"""
-	perl add_hgnc.pl refseq_ids.txt gene2accession.gz gene_info.gz > refseq_ids_xref.txt
-	cut -f 3 refseq_ids_xref.txt > refseq_ids_hgnc.txt
+	add_hgnc.pl $refseqid $gene2accession $geneinfo | sort -u > refseq_ids_xref.txt
+	cut -f 3 refseq_ids_xref.txt | sort -u > refseq_ids_hgnc.txt
 	"""
 }
 
 /************************************/
 /*       Get OrthoDB sequences      */
-/* Corresponding to HGNC ID         */
+/* Corresponding to NCBI ID         */
 /************************************/
 process getOrthoDBIds{
-	maxForks 1
-	publishDir "${outpath}", mode: 'copy'
+	maxForks 3
 
 	input:
-	val hgnc from hgncid.splitText( by: 1 )
+	val hgnc from hgncid.splitText( by: 1 ).map{ v -> v.trim() }
 	
 	output:
-	stdout into protids
-	
-	shell:
-	'''
-	curl 'https://v100.orthodb.org/search?query=HGNC%3A${hgnc}&level=9443&species=9443'|jq '.data | join(",")' | sed 's/"//g'
-	sleep 2
-	'''
+	file "ids.txt" into protids,protids2
+
+	script:
+	"""
+	curl 'https://v100.orthodb.org/search?query=${hgnc}&ncbi=0&level=9443&species=9443&singlecopy=1&universal=0.9'|jq '.data | join(",")' | sed 's/"//g' | sed 's/,/\\n/g' > ids.txt
+	sleep 1
+	"""
 }
+
+protids2.collectFile(name: "all_orthoid.txt").subscribe{file -> file.copyTo(outpath.resolve(file.name))}
 
 /***********************************/
 /* Download sequences and metadata */
@@ -69,13 +70,16 @@ process downloadSequences{
 	tag "${id}"
 
 	input:
-	val id from protids.map{ v -> v.trim() }
+	val id from protids.collectFile(name: 'allids.txt').splitText( by: 1 ).map{ v -> v.trim() }.unique().filter{ it.length() > 0 }
 	
 	output:
-	set val(id), file("sequences.fasta") into sequences
+	tuple val(id), file("sequences.fasta") into sequences
 
-	shell:
-	template "dl_seq.sh"
+	script:
+	"""
+	goalign rename -i "https://v100.orthodb.org/fasta?id=${id}"  --regexp '([^\\s]+).*' --replace '\$1' --unaligned > sequences.fasta
+	sleep 2
+	"""
 }
 
 process getMapTable{
@@ -146,7 +150,7 @@ process alignSequences{
 
 process concatSequences {
 	input:
-	file 'align_fasta' from alignment.toList()
+	file 'align_fasta' from alignment.collect()
 
 	output:
 	file "concat.fasta" into concat
@@ -296,7 +300,6 @@ process compareTrees{
 	gotree compare trees -i !{tree} -c !{ncbi} > tree_comparison.txt
 	'''
 }
-
 
 /**********************************/
 /*      Uploading tree to ITol    */
