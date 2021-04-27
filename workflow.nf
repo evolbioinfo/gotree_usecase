@@ -3,6 +3,9 @@ params.seed=2000
 params.outpath="results"
 params.itolconfig= "data/itol_image_config.txt"
 params.refseqid = "data/refseq_ids.txt"
+params.ncbirenamefile = "data/ncbi_rename.txt"
+params.itolkey="none"
+params.itolproject="none"
 //params.mapfile="data/mapfile.txt"
 
 nboot = params.nboot
@@ -12,6 +15,9 @@ itolconfig=file(params.itolconfig)
 gene2accession=file("ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/gene2accession.gz")
 geneinfo=file("ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/gene_info.gz")
 refseqid=file(params.refseqid)
+ncbirenamefile=file(params.ncbirenamefile)
+itolkey=params.itolkey
+itolproject=params.itolproject
 //mapfile=file(params.mapfile)
 
 
@@ -240,6 +246,7 @@ process pruneNCBITax {
 
 	input:
 	file tree from tree
+	file map from ncbirenamefile
 	file ncbi from ncbitax
 
 	output:
@@ -248,14 +255,32 @@ process pruneNCBITax {
 	shell:
 	'''
 	#!/usr/bin/env bash
-	gotree prune -i !{ncbi} -c !{tree} -o ncbi_pruned.nw
+	gotree rename -i !{tree} -m !{map} -r -o tmp 
+	gotree prune -i !{ncbi} -c tmp -o ncbi_pruned.nw
 	'''
+}
+
+/*************************************/
+/*  Rename some tips to match orthodb*/
+/*************************************/
+process renameNCBITaxonomy {
+	input:
+	file ncbi from ncbipruned
+	file map from ncbirenamefile
+
+	output:
+	file "ncbi_rename.nw" into ncbitaxrename
+
+	script:
+	"""
+	gotree rename -i $ncbi -o ncbi_rename.nw -m $map
+	"""
 }
 
 process rerootNCBITax {
 
 	input:
-	file tree from ncbipruned
+	file tree from ncbitaxrename
 
 	output:
 	file "ncbi_rerooted.nw" into ncbirerooted1, ncbirerooted2
@@ -311,6 +336,8 @@ process uploadTree{
 	input:
 	file tree from annotated
 	file itolconfig
+	val itolkey
+	val itolproject
 
 	output:
 	file "tree_url.txt" into iTOLurl
@@ -320,7 +347,7 @@ process uploadTree{
 	'''
 	#!/usr/bin/env bash
 	# Upload the tree
-	gotree upload itol --name "AnnotatedTree" -i !{tree} > tree_url.txt
+	gotree upload itol --name "AnnotatedTree" -i !{tree} --user-id !{itolkey} --project !{itolproject} > tree_url.txt
 	# We get the iTOL id
 	ID=$(basename $(cat tree_url.txt ))
 	# We Download the image with options defined in data/itol_image_config.txt
