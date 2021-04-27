@@ -6,6 +6,10 @@ In this use case, we analyze a phylogenomic dataset inspired from [Vanderpool et
 
 To do so, the workflow first maps the genbank identifiers of the 1,730 analyzed genes to their OrthoDB identifiers, and retrieves the orthologous groups of proteins shared in at least 90% of the 25 analyzed primates, and finally reconstructs a phylogenetic tree of these primates.
 
+## Workflow
+
+![Workflow DAG](images/dag.svg)
+
 ## Results
 
 The tree can be visualized [here](https://itol.embl.de/tree/157996425332211619518043)
