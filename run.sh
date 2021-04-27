@@ -1,2 +1,1 @@
-nextflow run workflow.nf -with-dag flowchart.dot
-
+nextflow run workflow.nf --itolkey <User iTOL Key>> --itolproject <iTOL project>
