@@ -6,7 +6,6 @@ params.refseqid = "data/refseq_ids.txt"
 params.ncbirenamefile = "data/ncbi_rename.txt"
 params.itolkey="none"
 params.itolproject="none"
-//params.mapfile="data/mapfile.txt"
 
 nboot = params.nboot
 seed = params.seed
@@ -18,15 +17,10 @@ refseqid=file(params.refseqid)
 ncbirenamefile=file(params.ncbirenamefile)
 itolkey=params.itolkey
 itolproject=params.itolproject
-//mapfile=file(params.mapfile)
 
 
-/************************************/
-/*       Get the NCBI ID            */
-/* Related to the RefSeq protein ID */
-/*  Given in                        */
-/* https://journals.plos.org/plosbiology/article/file?type=supplementary&id=info:doi/10.1371/journal.pbio.3000954.s008&rev=1 */
-/************************************/
+// Get the NCBI & HGNC ID Related to the RefSeq protein ID given in 
+// https://journals.plos.org/plosbiology/article/file?type=supplementary&id=info:doi/10.1371/journal.pbio.3000954.s008&rev=1
 process getNCBIIds{
 	publishDir "${outpath}", mode: 'copy'
 
@@ -46,10 +40,8 @@ process getNCBIIds{
 	"""
 }
 
-/************************************/
-/*       Get OrthoDB sequences      */
-/* Corresponding to NCBI ID         */
-/************************************/
+
+// Get OrthoDB sequences corresponding to NCBI ID
 process getOrthoDBIds{
 	maxForks 3
 
@@ -68,9 +60,7 @@ process getOrthoDBIds{
 
 protids2.collectFile(name: "all_orthoid.txt").subscribe{file -> file.copyTo(outpath.resolve(file.name))}
 
-/***********************************/
-/* Download sequences and metadata */
-/***********************************/
+// Download sequences and metadata
 process downloadSequences{
 	maxForks 1
 	tag "${id}"
@@ -88,6 +78,8 @@ process downloadSequences{
 	"""
 }
 
+
+// Download meta data
 process getMapTable{
 	maxForks 1
 	tag "${id}"
@@ -99,20 +91,17 @@ process getMapTable{
 	set val(id), file(seq), file("map.txt") into mapfile
 	file "gene.txt" into genefile
 
-	shell:
-	'''
-	wget -O align.tab https://v100.orthodb.org/tab?query=!{id}
+	script:
+	"""
+	wget -O align.tab https://v100.orthodb.org/tab?query=${id}
 	cut -f 5,6 align.tab > map.txt
 	cut -f 1,2 align.tab | tail -n+2 | sort -u > gene.txt
-	'''
+	"""
 }
 
 genefile.collectFile(name: 'genes.txt').subscribe{file -> file.copyTo(outpath.resolve(file.name))}
 
-/***************************/
-/*  Cleaning, reformating  */
-/* and aligning sequences  */
-/***************************/
+// Renaming sequences
 process renameSequences{
 	tag "${id}"
 
@@ -122,12 +111,14 @@ process renameSequences{
 	output:
 	file "renamed.fasta" into renamed
 
-	shell:
-	'''
-	goalign rename -r -m !{mapfile} -i !{sequences} --unaligned | goalign rename --regexp " " --replace "_" --unaligned  > renamed.fasta
-	'''
+	script:
+	"""
+	goalign rename -r -m ${mapfile} -i ${sequences} --unaligned | goalign rename --regexp " " --replace "_" --unaligned  > renamed.fasta
+	"""
 }
 
+
+// Cleaning sequences
 process cleanSequences{
 	input:
 	file(sequences) from renamed
@@ -135,12 +126,14 @@ process cleanSequences{
 	output:
 	file "cleaned.fasta" into cleaned
 
-	shell:
-	'''
-	goalign replace -s U -n X -i !{sequences} -o cleaned.fasta --unaligned
-	'''
+	script:
+	"""
+	goalign replace -s U -n X -i ${sequences} -o cleaned.fasta --unaligned
+	"""
 }
 
+
+// Aligning sequences
 process alignSequences{
 	input:
 	file cleaned
@@ -148,12 +141,14 @@ process alignSequences{
 	output:
 	file "aligned.fasta" into alignment
 
-	shell:
-	'''
-	mafft --quiet !{cleaned} > aligned.fasta
-	'''
+	script:
+	"""
+	mafft --quiet ${cleaned} > aligned.fasta
+	"""
 }
 
+
+// Concatenating all multiple sequence alignments
 process concatSequences {
 	input:
 	file 'align_fasta' from alignment.collect()
@@ -161,12 +156,13 @@ process concatSequences {
 	output:
 	file "concat.fasta" into concat
 
-	shell:
-	'''
+	script:
+	"""
 	goalign concat -o concat.fasta -i none align_fasta*
-	'''
+	"""
 }
 
+// Cleaning the concatenated multiple sequence alignment (BMGE)
 process cleanAlign {
 	input:
 	file align from concat
@@ -174,12 +170,14 @@ process cleanAlign {
 	output:
 	file "cleanalign.fasta" into cleanalign
 
-	shell:
-	'''
-	BMGE -i !{align} -t AA -m BLOSUM62 -w 3 -g 0.2 -h 0.5  -b 5 -of cleanalign.fasta
-	'''
+	script:
+	"""
+	BMGE -i ${align} -t AA -m BLOSUM62 -w 3 -g 0.2 -h 0.5  -b 5 -of cleanalign.fasta
+	"""
 }
 
+
+// Reformatting the alignment in Phylip
 process reformatAlignment{
 	input:
 	file cleanalign
@@ -187,15 +185,14 @@ process reformatAlignment{
 	output:
 	file "aligned.phylip" into alignmentphylip
 
-	shell:
-	'''
-	goalign reformat phylip -i !{cleanalign} -o aligned.phylip
-	'''
+	script:
+	"""
+	goalign reformat phylip -i ${cleanalign} -o aligned.phylip
+	"""
 }
 
-/***************************/
-/*     Inferring tree      */
-/***************************/
+// Inferring the species tree from the concatenated 
+// multiple sequence alignment
 process inferTrueTree{
 	publishDir "${outpath}", mode: 'copy'
 
@@ -206,13 +203,14 @@ process inferTrueTree{
 	output:
 	file "tree.nw" into tree, tree2
 
-	shell:
-	'''
-	iqtree -s !{align} -seed !{seed} -m MFP -b 100 -nt !{task.cpus}
+	script:
+	"""
+	iqtree -s ${align} -seed ${seed} -m MFP -b 100 -nt ${task.cpus}
 	mv *.treefile tree.nw
-	'''
+	"""
 }
 
+// Rerooting the tree
 process rerootTree{
 	publishDir "${outpath}", mode: 'copy'
 
@@ -222,26 +220,25 @@ process rerootTree{
 	output:
 	file "rerooted.nw" into reroottree1, reroottree2
 
-	shell:
-	'''
-	gotree reroot outgroup -i !{tree} -o rerooted.nw Otolemur_garnettii Microcebus_murinus Propithecus_coquereli 
-	'''
+	script:
+	"""
+	gotree reroot outgroup -i ${tree} -o rerooted.nw Otolemur_garnettii Microcebus_murinus Propithecus_coquereli 
+	"""
 }
 
-/**********************************/
-/*  Comparison with NCBI taxonomy */
-/**********************************/
+// Downloading the NCBI Taxonomy
 process downloadNewickTaxonomy {
 	output:
 	file "ncbi.nw" into ncbitax
 
-	shell:
-	'''
-	#!/usr/bin/env bash
+	script:
+	"""
 	gotree download ncbitax -o ncbi.nw
-	'''
+	"""
 }
 
+
+// Keep the desired species from the NCBI taxonomy
 process pruneNCBITax {
 
 	input:
@@ -252,17 +249,15 @@ process pruneNCBITax {
 	output:
 	file "ncbi_pruned.nw" into ncbipruned
 
-	shell:
-	'''
-	#!/usr/bin/env bash
-	gotree rename -i !{tree} -m !{map} -r -o tmp 
-	gotree prune -i !{ncbi} -c tmp -o ncbi_pruned.nw
-	'''
+	script:
+	"""
+	gotree rename -i ${tree} -m ${map} -r -o tmp 
+	gotree prune -i ${ncbi} -c tmp -o ncbi_pruned.nw
+	"""
 }
 
-/*************************************/
-/*  Rename some tips to match orthodb*/
-/*************************************/
+// Rename some tips from the NCBI Taxonomy to match 
+// orthodb species names
 process renameNCBITaxonomy {
 	input:
 	file ncbi from ncbipruned
@@ -277,6 +272,7 @@ process renameNCBITaxonomy {
 	"""
 }
 
+// Reroot the NCBI taxonomy
 process rerootNCBITax {
 
 	input:
@@ -285,13 +281,14 @@ process rerootNCBITax {
 	output:
 	file "ncbi_rerooted.nw" into ncbirerooted1, ncbirerooted2
 
-	shell:
-	'''
-	#!/usr/bin/env bash
-	gotree reroot outgroup -i !{tree} -o ncbi_rerooted.nw Otolemur_garnettii Microcebus_murinus Propithecus_coquereli 
-	'''
+	script:
+	"""
+	gotree reroot outgroup -i ${tree} -o ncbi_rerooted.nw Otolemur_garnettii Microcebus_murinus Propithecus_coquereli 
+	"""
 }
 
+
+// Annotating the inferred tree
 process annotateTree{
 	publishDir "${outpath}", mode: 'copy'
 
@@ -302,13 +299,14 @@ process annotateTree{
 	output:
 	file "annotated.nw" into annotated
 
-	shell:
-	'''
-	#!/usr/bin/env bash
-	gotree annotate -i !{tree} -c !{ncbi} -o annotated.nw
-	'''
+	script:
+	"""
+	gotree annotate -i ${tree} -c ${ncbi} -o annotated.nw
+	"""
 }
 
+
+// Comparing inferred tree and NCBI taxonomy branches
 process compareTrees{
 	publishDir "${outpath}", mode: 'copy'
 
@@ -319,17 +317,14 @@ process compareTrees{
 	output:
 	file "tree_comparison.txt" into comparison
 
-	shell:
-	'''
-	#!/usr/bin/env bash
-	gotree compare trees -i !{tree} -c !{ncbi} > tree_comparison.txt
-	'''
+	script:
+	"""
+	gotree compare trees -i ${tree} -c ${ncbi} > tree_comparison.txt
+	"""
 }
 
-/**********************************/
-/*      Uploading tree to ITol    */
-/*       Downloading the image    */
-/**********************************/
+// Uploading tree to ITol &
+// Downloading the resulting image
 process uploadTree{
 	publishDir "${outpath}", mode: 'copy'
 
@@ -343,14 +338,13 @@ process uploadTree{
 	file "tree_url.txt" into iTOLurl
 	file "tree_image.svg" into iTOLimage
 
-	shell:
-	'''
-	#!/usr/bin/env bash
+	script:
+	"""
 	# Upload the tree
-	gotree upload itol --name "AnnotatedTree" -i !{tree} --user-id !{itolkey} --project !{itolproject} > tree_url.txt
+	gotree upload itol --name "AnnotatedTree" -i ${tree} --user-id ${itolkey} --project ${itolproject} > tree_url.txt
 	# We get the iTOL id
 	ID=$(basename $(cat tree_url.txt ))
 	# We Download the image with options defined in data/itol_image_config.txt
-	gotree download itol -c !{itolconfig} -f svg -o tree_image.svg -i $ID
-	'''
+	gotree download itol -c ${itolconfig} -f svg -o tree_image.svg -i $ID
+	"""
 }
