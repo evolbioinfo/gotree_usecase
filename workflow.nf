@@ -343,8 +343,8 @@ process uploadTree{
 	# Upload the tree
 	gotree upload itol --name "AnnotatedTree" -i ${tree} --user-id ${itolkey} --project ${itolproject} > tree_url.txt
 	# We get the iTOL id
-	ID=$(basename $(cat tree_url.txt ))
+	ID=\$(basename \$(cat tree_url.txt ))
 	# We Download the image with options defined in data/itol_image_config.txt
-	gotree download itol -c ${itolconfig} -f svg -o tree_image.svg -i $ID
+	gotree download itol -c ${itolconfig} -f svg -o tree_image.svg -i \$ID
 	"""
 }
