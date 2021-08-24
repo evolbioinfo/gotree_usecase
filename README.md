@@ -1,5 +1,13 @@
 # This repository contains the Gotree/Goalign use-case workflow
 
+The present use-case is described in the following publication:
+
+> Frédéric Lemoine, Olivier Gascuel
+>
+> Gotree/Goalign: toolkit and Go API to facilitate the development of phylogenetic workflows,
+>
+> NAR Genomics and Bioinformatics, Volume 3, Issue 3, September 2021, lqab075, [doi](https://doi.org/10.1093/nargab/lqab075)
+
 
 ## Introduction
 In this use case, we analyze a phylogenomic dataset inspired from [Vanderpool et al. PLoS biology, 2020](https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.3000954&rev=1#pbio.3000954.ref039), in which the authors analyze a set of 1,730 genes in primates in different ways. They infer the species tree either from from individual gene trees using [ASTRAL III](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-018-2129-y) or from gene concatenation using maximum likelihood. Our use case is inspired from the concatenation study, using available groups of primate orthologous proteins in [OrthoDB](https://www.orthodb.org/).
